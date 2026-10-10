@@ -1,7 +1,7 @@
 # recon_tool V1.0
 
 <p align="center">
-  <img src="[https://github.com/M0G3H/recon_tool/main/Untitled.png]" alt="Recon Tool" width="800">
+  <img src="https://raw.githubusercontent.com/M0G3H/recon_tool/main/Untitled.png" alt="Recon Tool" width="800">
 </p>
 
 A Bash-based security reconnaissance automation toolkit that combines common network and web application assessment tools and can generate an HTML reconnaissance report.
