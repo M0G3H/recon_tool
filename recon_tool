@@ -1,0 +1,229 @@
+#!/bin/bash
+
+set -eo pipefail
+
+#set color
+RED="\033[91m"
+GREEN="\033[92m"
+YELLOW="\033[93m"
+BLUE="\033[94m"
+CYAN="\033[96m"
+RESET="\033[0m"
+
+#load target
+source $HOME/Desktop/recon_tool/target.txt
+
+#files path modification
+PORTSCAN_FILE_PATH=~/Desktop/recon_tool/"$DOMAIN"/portscan.txt
+SHORT_PORT_SCAN_PATH=$HOME/Desktop/recon_tool/$DOMAIN/short-portscan.txt
+SUBDOMAIN_FUZZ_DICTIONARY=~/Desktop/source/dictionary/subs.txt
+FFUF_SUBDOMAIN_CSV_PATH=~/Desktop/recon_tool/$DOMAIN/sub_enum.csv
+CLEAN_SUBDOMAIN_PATH=~/Desktop/recon_tool/$DOMAIN/clean_sub.txt
+DIRECTORY_FUZZ_DICTIONARY=~/Desktop/source/dictionary/combined_directory.txt
+FFUF_DIRECTORY_CSV_PATH=~/Desktop/recon_tool/$DOMAIN/dir_enum.csv
+CLEAN_DIRECTORY_PATH=~/Desktop/recon_tool/$DOMAIN/clean_dir.txt
+WEB_FINGERPRINT_PATH=~/Desktop/recon_tool/$DOMAIN/web_finger.txt
+LINK_FINDER_PATH=~/Desktop/recon_tool/$DOMAIN/pcp-link.html
+NUCLEI_PATH=~/Desktop/recon_tool/$DOMAIN/nuclei_scan.txt
+BURP_EXPORT_PATH=~/Desktop/recon_tool/$DOMAIN/burp-request
+CUSTOM_ATTACK_PATH=~/Desktop/recon_tool/$DOMAIN/custom-attack.txt
+ARJUN_PATH=~/Desktop/recon_tool/$DOMAIN/param.txt
+CLEAN_BURP_DIRECTORY_PATH=~/Desktop/recon_tool/$DOMAIN/burp-path.txt
+
+#port scan (menu item)
+port_scan() {
+echo "[nmap service scan]" >> "$PORTSCAN_FILE_PATH"
+nmap -sC -sV "$IP" -T4 >> "$PORTSCAN_FILE_PATH" 2>&1
+echo "[/nmap service scan]" >> "$PORTSCAN_FILE_PATH"
+printf "\n" >> "$PORTSCAN_FILE_PATH"
+nmap -sV --open -T4 "$IP" -oG "$SHORT_PORT_SCAN_PATH"
+}
+
+#FUZZ (menu item)
+fuzz() {
+#sub enum
+ffuf -rate 500 -ac -u https://FUZZ."$DOMAIN" -mc 200-299,301,302,401,403,405,500 -s  -w "$SUBDOMAIN_FUZZ_DICTIONARY" -H "$COOKIE" -of csv -o "$FFUF_SUBDOMAIN_CSV_PATH"
+tail -n +2 "$FFUF_SUBDOMAIN_CSV_PATH" | cut -d',' -f1 >> "$CLEAN_SUBDOMAIN_PATH"
+rm "$FFUF_SUBDOMAIN_CSV_PATH"
+#directory enum
+ffuf -rate 500 -ac -u https://"$DOMAIN"/FUZZ -mc 200-299,301,302,401,403,405,500 -s  -w "$DIRECTORY_FUZZ_DICTIONARY" -H "$COOKIE" -of csv -o "$FFUF_DIRECTORY_CSV_PATH"
+tail -n +2 "$FFUF_DIRECTORY_CSV_PATH" | cut -d',' -f1 >> "$CLEAN_DIRECTORY_PATH"
+rm "$FFUF_DIRECTORY_CSV_PATH"
+#param fuzz
+while read -r dir; do echo "===== /$dir =====" >> "$ARJUN_PATH"; arjun -u "https://$DOMAIN/$dir" >> "$ARJUN_PATH" 2>&1; done < "$CLEAN_DIRECTORY_PATH"
+}
+
+#information (menu item)
+information() {
+#fingerprint web
+echo "[curl scan]" >> "$WEB_FINGERPRINT_PATH"
+curl -sS -IL "https://$DOMAIN" >> "$WEB_FINGERPRINT_PATH"
+echo "[/curl scan]" >> "$WEB_FINGERPRINT_PATH"
+printf "\n" >> "$WEB_FINGERPRINT_PATH"
+echo "[nikto scan]" >> "$WEB_FINGERPRINT_PATH"
+nikto -host "https://$DOMAIN" 2>/dev/null | grep '^\+' >> "$WEB_FINGERPRINT_PATH"
+echo "[/nikto scan]" >> "$WEB_FINGERPRINT_PATH"
+printf "\n" >> "$WEB_FINGERPRINT_PATH"
+
+#Link Finder
+linkfinder  -i https://"$DOMAIN" -o "$LINK_FINDER_PATH"
+
+#SSL Scan
+echo "[SSL scan]" >> "$WEB_FINGERPRINT_PATH"
+sslscan https://"$DOMAIN" >> "$WEB_FINGERPRINT_PATH"
+echo "[/SSL scan]" >> "$WEB_FINGERPRINT_PATH"
+printf "\n" >> "$WEB_FINGERPRINT_PATH"
+
+#Detect waf
+echo "[WAF scan]" >> "$WEB_FINGERPRINT_PATH"
+wafw00f "$DOMAIN" >> "$WEB_FINGERPRINT_PATH"
+echo "[/WAF scan]" >> "$WEB_FINGERPRINT_PATH"
+printf "\n" >> "$WEB_FINGERPRINT_PATH"
+}
+
+#nuclei scan (menu item)
+nuclei_scan() {
+echo "[SSL scan]" >> "$NUCLEI_PATH"
+nuclei -u https://"$DOMAIN" -c 5 -t ~/.local/nuclei-templates/ssl/ >> "$NUCLEI_PATH"
+echo "[/SSL scan]" >> "$NUCLEI_PATH"
+printf "\n" >> "$NUCLEI_PATH"
+
+echo "[Vulnerability scan]" >> "$NUCLEI_PATH"
+nuclei -u https://"$DOMAIN"  -c 5 -t ~/.local/nuclei-templates/http/vulnerabilities/ >>  "$NUCLEI_PATH"
+echo "[/Vulnerability scan]" >> "$NUCLEI_PATH"
+printf "\n" >> "$NUCLEI_PATH"
+
+echo "[CVEs scan]" >> "$NUCLEI_PATH"
+nuclei -u https://"$DOMAIN" -c 5 -t ~/.local/nuclei-templates/http/cves/ >>  "$NUCLEI_PATH"
+echo "[/CVEs scan]" >> "$NUCLEI_PATH"
+printf "\n" >> "$NUCLEI_PATH"
+
+echo "[Technologies scan]" >> "$NUCLEI_PATH"
+nuclei -u https://"$DOMAIN" -c 5 -t ~/.local/nuclei-templates/http/technologies/ >>  "$NUCLEI_PATH"
+echo "[/Technologies scan]" >> "$NUCLEI_PATH"
+printf "\n" >> "$NUCLEI_PATH"
+
+echo "[Exposure scan]" >> "$NUCLEI_PATH"
+nuclei -u https://"$DOMAIN" -c 5 -t ~/.local/nuclei-templates/http/exposures/ >>  "$NUCLEI_PATH"
+echo "[/Exposure scan]" >> "$NUCLEI_PATH"
+printf "\n" >> "$NUCLEI_PATH"
+
+echo "[Misconfiguration scan]" >> "$NUCLEI_PATH"
+nuclei -u https://"$DOMAIN" -c 5 -t ~/.local/nuclei-templates/http/misconfiguration/ >>  "$NUCLEI_PATH"
+echo "[/Misconfiguration scan]" >> "$NUCLEI_PATH"
+printf "\n" >> "$NUCLEI_PATH"
+}
+
+#custom attacks
+attack() {
+#make clean path from burp file
+grep -oP '(?<=<path><!\[CDATA\[).*(?=\]\]></path>)' "$BURP_EXPORT_PATH" | grep -vE '\.(woff|woff2|js|css|png|jpg|jpeg|gif|svg|ico)$' > "$CLEAN_BURP_DIR_PATH"
+
+#xss
+echo "[XSS attack]" >> "$CUSTOM_ATTACK_PATH"
+sed "s#^#https://$DOMAIN#" "$CLEAN_BURP_DIR_PATH" | gf xss | dalfox pipe -H "$COOKIE" --silence >> "$CUSTOM_ATTACK_PATH"
+echo "[/XSS attack]" >> "$CUSTOM_ATTACK_PATH"
+printf "\n" >> "$CUSTOM_ATTACK_PATH"
+
+
+#sqli (not test)
+#echo "[SQLI attack]" >> "$CUSTOM_ATTACK_PATH"
+#sed "s#^#https://$DOMAIN#" "$CLEAN_BURP_DIR_PATH" | gf sqli | sqlmap --batch --output-dir="$CUSTOM_ATTACK_PATH"
+#echo "[/SQLI attack]" >> "$CUSTOM_ATTACK_PATH"
+#printf "\n" >> "$CUSTOM_ATTACK_PATH"
+
+#smuggling attack
+echo "[smuggling attack scan]" >> "$CUSTOM_ATTACK_PATH"
+smuggler -u https://"$DOMAIN" >> "$CUSTOM_ATTACK_PATH"
+echo "[/smuggling attack scan]" >> "$CUSTOM_ATTACK_PATH"
+printf "\n" >> "$CUSTOM_ATTACK_PATH"
+
+#jave deseilization attack check
+echo "[jave deseilization attack scan]" >> "$CUSTOM_ATTACK_PATH"
+#jexboss -host https://"$DOMAIN" | grep -A1 "\* Results:" >> "$CUSTOM_ATTACK_PATH"
+echo "[/jave deseilization attack scan]" >> "$CUSTOM_ATTACK_PATH"
+printf "\n" >> "$CUSTOM_ATTACK_PATH"
+
+}
+
+#starting functions
+start_function() {
+	mkdir -p ~/Desktop/recon_tool/$DOMAIN/
+	cp ~/Desktop/recon_tool/  ~/Desktop/recon_tool/$DOMAIN/
+	printf "starting recon on target:\nDOMAIN:%s IP:%s\n" "$DOMAIN" "$IP"
+}
+
+#ending function
+ending_function() {
+	python3 ~/Desktop/recon_tool/report_maker.py ~/Desktop/recon_tool/$DOMAIN -o ~/Desktop/recon_tool/$DOMAIN/finall-report.html
+	xdg-open ~/Desktop/recon_tool/$DOMAIN/finall-report.html
+}
+
+usage() {
+
+RED="\033[91m"
+GREEN="\033[92m"
+YELLOW="\033[93m"
+BLUE="\033[94m"
+CYAN="\033[96m"
+RESET="\033[0m"
+
+printf "${RED}
+
+██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗      ████████╗ ██████╗  ██████╗ ██╗     
+██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║      ╚══██╔══╝██╔═══██╗██╔═══██╗██║     
+██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║         ██║   ██║   ██║██║   ██║██║     
+██╔══██╗██╔══╝  ██║     ██║   ██║██║╚██╗██║         ██║   ██║   ██║██║   ██║██║     
+██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║         ██║   ╚██████╔╝╚██████╔╝███████╗
+╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝         ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝
+
+${RESET}
+${YELLOW}        @M0G3H                  v1.0${RESET}
+
+
+${GREEN}Usage:${RESET}
+${YELLOW}        Don't Forget to fill target.txt${RESET}
+${BLUE}        recon_tool -nuclei${RESET}	   ${CYAN}(for nuclei scan)${RESET}
+${BLUE}        recon_tool -information${RESET}	   ${CYAN}(for information gathering)${RESET}
+${BLUE}        recon_tool -fuzz${RESET}	   ${CYAN}(for subdomain, directory, parameter fuzzing)${RESET}
+${BLUE}        recon_tool -prtscn${RESET}	   ${CYAN}(for port scan)${RESET}
+${BLUE}        recon_tool -full${RESET}	   ${CYAN}(for full scan)${RESET}
+
+"
+}
+
+case "$1" in
+
+	-nuclei)
+		start_function
+		nuclei_scan
+		;;
+
+	-information)
+		start_function
+		information
+		;;
+
+	-fuzz)
+		start_function
+		fuzz
+		;;
+
+	-prtscn)
+		start_function
+		port_scan
+		;;
+
+	-full)
+		start_function
+		port_scan
+		nuclei_scan
+		information
+		fuzz
+		ending_function
+		;;
+
+	*)
+		usage
+		;;
+esac

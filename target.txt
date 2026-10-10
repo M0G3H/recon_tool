@@ -1,0 +1,4 @@
+IP=1.2.3.4
+DOMAIN=example.com
+COOKIE=""
+#sample: COOKIE="Authorization: Bearer aHVoLnZlcnkgZ29vZCBzbWFydHkgdGFrZSB5b3VyIHRva2VuLg=="
