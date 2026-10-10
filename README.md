@@ -15,6 +15,7 @@ Depending on the selected mode and the tools/data available on your system, `rec
 - **Port and service scanning** 
 - **Subdomain and directory fuzzing** 
 - **HTTP and web-server information gathering**
+- **Burp Suite Export Directory Extraction**
 - **Parameter discovery** 
 - **URL/JavaScript endpoint extraction** 
 - **TLS configuration checks** 
@@ -107,6 +108,10 @@ The script supports these modes:
 For the exact options available in your copy, inspect `recon_tool.sh` or run its help option if one is implemented.
 
 ## Output and reports
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/M0G3H/recon_tool/main/Screenshot_6.png" alt="Recon Tool" width="800">
+</p>
 
 Scan output is stored under a domain-specific directory.
 ## Third-party projects
